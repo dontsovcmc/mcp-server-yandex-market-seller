@@ -1,0 +1,40 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.dontsovcmc/yandex-market-seller",
+  "description": "MCP server for Yandex Market Partner API — orders, offers, prices, stocks, analytics",
+  "repository": {
+    "url": "https://github.com/dontsovcmc/mcp-server-yandex-market-seller",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "mcp-server-yandex-market-seller",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "uvx",
+      "environmentVariables": [
+        {
+          "name": "YM_TOKEN",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "YM_CAMPAIGN_ID",
+          "isRequired": true
+        },
+        {
+          "name": "YM_BUSINESS_ID",
+          "isRequired": true
+        },
+        {
+          "name": "YM_AUTH_TYPE",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}
