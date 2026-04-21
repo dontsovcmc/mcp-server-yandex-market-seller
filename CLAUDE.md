@@ -28,7 +28,7 @@ GitHub Actions: `.github/workflows/test.yml`, `runs-on: self-hosted`. Токен
 src/mcp_server_yandex_market_seller/
 ├── __init__.py          # main(), версия
 ├── __main__.py          # python -m entry point
-├── server.py            # FastMCP, все tools (33 инструмента)
+├── server.py            # FastMCP, все tools
 ├── ym_api.py            # HTTP-клиент Yandex Market Partner API
 └── cli.py               # CLI-интерфейс
 ```
