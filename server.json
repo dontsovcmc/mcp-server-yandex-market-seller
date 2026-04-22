@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.dontsovcmc/yandex-market-seller",
-  "description": "MCP server for Yandex Market Partner API — orders, offers, prices, stocks, analytics",
+  "description": "MCP server for Yandex Market Partner API — orders, offers, prices, stocks, promos, shipments, returns, analytics (131 tools)",
   "repository": {
     "url": "https://github.com/dontsovcmc/mcp-server-yandex-market-seller",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "mcp-server-yandex-market-seller",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },
