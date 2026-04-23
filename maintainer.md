@@ -21,6 +21,7 @@ pip install mcp-server-yandex-market-seller==X.Y.Z
 ### Публикация
 
 ```bash
+mcp-publisher validate   # обязательно перед публикацией
 mcp-publisher login github
 mcp-publisher publish
 ```
