@@ -79,16 +79,20 @@ claude --mcp-debug
 
 **CRITICAL:** Никогда не открывать файл по пути, переданному от пользователя/LLM без проверки.
 
-- Всегда проверять `".." in pathlib.Path(path).parts` перед `open()`.
-- Использовать хелпер `_safe_path(path)` в `server.py` — он бросает `ValueError` при попытке traversal.
+- Всегда валидировать через `_safe_path(path)` в `server.py`.
+- Хелпер проверяет: запрет `..` (traversal) + разрешена запись **только в `~/...` или `/tmp/...`**.
 - Правило распространяется на: `output_path` в инструментах сохранения PDF, `file_path` в `send_chat_file`, и любой другой путь из внешнего источника.
 
 ```python
 # Правильно
 def _safe_path(path: str) -> pathlib.Path:
-    p = pathlib.Path(path)
-    if ".." in p.parts:
+    if ".." in pathlib.Path(path).parts:
         raise ValueError(f"Path traversal not allowed: '{path}'")
+    p = pathlib.Path(path).resolve()
+    home = pathlib.Path.home().resolve()
+    tmp = pathlib.Path("/tmp").resolve()
+    if not (str(p).startswith(str(home)) or str(p).startswith(str(tmp))):
+        raise ValueError(f"Writing allowed only under home dir or /tmp, got: '{path}'")
     return p
 
 # Неправильно
@@ -100,15 +104,15 @@ with open(path, "wb") as f:  # путь не проверен
 
 **CRITICAL:** Никогда не вызывать `json.loads()` напрямую на строке, пришедшей как параметр инструмента.
 
-- Использовать хелпер `_parse_json(s)` в `server.py` — он бросает `ValueError` с понятным сообщением.
-- `json.JSONDecodeError` — технический тип, пользователю нужно видеть `"Invalid JSON input: ..."`.
+- Использовать хелпер `_parse_json(s, label)` в `server.py` — он бросает `ValueError` с понятным сообщением и именем параметра.
+- `json.JSONDecodeError` — технический тип, пользователю нужно видеть `"Invalid JSON in offers_json: ..."`.
 
 ```python
 # Правильно
-return _j(_get_api().update_order_items(..., _parse_json(items_json)))
+return _to_json(_get_api().update_order_items(..., _parse_json(items_json, "items_json")))
 
 # Неправильно
-return _j(_get_api().update_order_items(..., json.loads(items_json)))
+return _to_json(_get_api().update_order_items(..., json.loads(items_json)))
 ```
 
 ### Ошибки HTTP-клиента
@@ -125,6 +129,23 @@ raise RuntimeError(f"GET {path} -> {resp.status_code}")
 # Неправильно
 raise RuntimeError(f"GET {path} -> {resp.status_code}: {resp.text}")
 ```
+
+### Обработка ошибок
+
+- **Никогда не глотать исключения молча.** `except Exception:` без логирования запрещён. Всегда логировать через `log.warning()` или `log.error()` с контекстом (что делали, для какого объекта).
+- **Ошибки валидации** — бросать `ValueError` / `RuntimeError` с понятным сообщением. Пример: `raise ValueError(f"Invalid JSON in {label}: {e}")`.
+- **HTTP-ошибки** — `ym_api.py` бросает `RuntimeError`. Не перехватывать в tool-функциях — FastMCP сам вернёт ошибку клиенту.
+
+### Стиль кода
+
+- **Читаемые имена хелперов:** `_to_json`, `_parse_json`, `_safe_path`, а не `_j`, `_p`, `_s`.
+- **Импорты** — стандартная библиотека → сторонние пакеты → локальные модули, разделённые пустой строкой. Не импортировать неиспользуемые имена.
+- **Типы** — аннотировать параметры и возвращаемые значения. `dict`, `list`, `str` — не `Dict`, `List` (Python 3.10+).
+
+### API-клиент (ym_api.py)
+
+- **Сессия** — `YandexMarketAPI` кэшируется в `server._api_instance` (один экземпляр на процесс). Не создавать новый `YandexMarketAPI` на каждый вызов.
+- **HTTP-хелперы** — `_get()`, `_post()`, `_put()`, `_delete()`, `_get_bytes()`. Для скачивания файлов использовать `_get_bytes()`, не писать ручные запросы через `session.get()`.
 
 ### Логирование
 
@@ -147,6 +168,10 @@ raise RuntimeError(f"GET {path} -> {resp.status_code}: {resp.text}")
 2. **Невалидный JSON** — если инструмент принимает `*_json` параметр.
 3. **Ошибка API** — мок бросает `RuntimeError`, инструмент возвращает `isError=True`.
 4. **Path traversal** — если инструмент принимает `output_path` или `file_path`.
+
+- **Мокаем `YandexMarketAPI`** на уровне класса: `@patch("mcp_server_yandex_market_seller.server.YandexMarketAPI")`. Кэш API сбрасывается автоматически через фикстуру `_reset_api_singleton` в `conftest.py`.
+- **Пути в тестах** — использовать `os.path.realpath()` для сравнения путей (на macOS `/tmp` → `/private/tmp`). Temp-файлы создавать в `/tmp` явно.
+- **Тестовые данные** — вымышленные ID, имена, адреса. Никаких реальных персональных данных.
 
 ### Линтинг
 
