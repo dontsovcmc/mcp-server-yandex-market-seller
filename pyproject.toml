@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-yandex-market-seller"
-version = "0.3.0"
+version = "0.4.0"
 description = "MCP server for Yandex Market Partner API — orders, offers, prices, stocks, analytics"
 readme = "README.md"
 license = {text = "MIT"}
@@ -21,7 +21,7 @@ build-backend = "hatchling.build"
 packages = ["src/mcp_server_yandex_market_seller"]
 
 [project.optional-dependencies]
-test = ["pytest>=8.0", "pytest-asyncio>=0.21", "anyio>=4.0"]
+test = ["pytest>=8.0", "pytest-asyncio>=0.21", "anyio>=4.0", "ruff>=0.4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
