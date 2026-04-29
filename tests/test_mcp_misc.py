@@ -1,4 +1,5 @@
 import json
+import os
 import pytest
 from unittest.mock import patch
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -418,32 +419,41 @@ async def test_ym_supply_request_documents():
 
 
 @pytest.mark.anyio
-async def test_order_labels_path_traversal():
+async def test_order_labels_unsafe_path():
     with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
         M.return_value.get_order_labels.return_value = b"PDF"
         async with create_connected_server_and_client_session(mcp._mcp_server) as s:
-            r = await s.call_tool("ym_order_labels", {"order_id": 1, "output_path": "../evil.pdf"})
+            r = await s.call_tool("ym_order_labels", {"order_id": 1, "output_path": "/etc/evil.pdf"})
             assert r.isError
-            assert "Path traversal" in r.content[0].text
+            assert "home or temp" in r.content[0].text.lower()
 
 
 @pytest.mark.anyio
-async def test_reception_transfer_act_path_traversal():
+async def test_reception_transfer_act_unsafe_path():
     with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
         M.return_value.get_reception_transfer_act.return_value = b"PDF"
         async with create_connected_server_and_client_session(mcp._mcp_server) as s:
-            r = await s.call_tool("ym_reception_transfer_act", {"output_path": "../../etc/passwd"})
+            r = await s.call_tool("ym_reception_transfer_act", {"output_path": "/var/evil.pdf"})
             assert r.isError
-            assert "Path traversal" in r.content[0].text
 
 
 @pytest.mark.anyio
-async def test_chat_file_send_path_traversal():
+async def test_chat_file_send_unsafe_path():
     with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI"):
         async with create_connected_server_and_client_session(mcp._mcp_server) as s:
-            r = await s.call_tool("ym_chat_file_send", {"chat_id": 1, "file_path": "../../../etc/passwd"})
+            r = await s.call_tool("ym_chat_file_send", {"chat_id": 1, "file_path": "/etc/passwd"})
             assert r.isError
-            assert "Path traversal" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_order_labels_hidden_file():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
+        M.return_value.get_order_labels.return_value = b"PDF"
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            home = os.path.expanduser("~")
+            r = await s.call_tool("ym_order_labels", {"order_id": 1, "output_path": f"{home}/.ssh/evil.pdf"})
+            assert r.isError
+            assert "hidden" in r.content[0].text.lower()
 
 
 # ── Security: invalid JSON ─────────────────────────────────────────

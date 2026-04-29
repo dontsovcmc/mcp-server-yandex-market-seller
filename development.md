@@ -80,20 +80,27 @@ claude --mcp-debug
 **CRITICAL:** Никогда не открывать файл по пути, переданному от пользователя/LLM без проверки.
 
 - Всегда валидировать через `_safe_path(path)` в `server.py`.
-- Хелпер проверяет: запрет `..` (traversal) + разрешена запись **только в `~/...` или `/tmp/...`**.
+- Хелпер проверяет:
+  1. `os.path.realpath()` — резолвит симлинки и `..` (защита от symlink-атак)
+  2. Запись разрешена **только в `~/...` или `/tmp/...`** (с `+ os.sep` для защиты от prefix-атак типа `/tmp_evil`)
+  3. Запрет записи в **hidden-файлы/директории** под home (`~/.ssh/`, `~/.config/` и т.д.)
 - Правило распространяется на: `output_path` в инструментах сохранения PDF, `file_path` в `send_chat_file`, и любой другой путь из внешнего источника.
 
 ```python
 # Правильно
-def _safe_path(path: str) -> pathlib.Path:
-    if ".." in pathlib.Path(path).parts:
-        raise ValueError(f"Path traversal not allowed: '{path}'")
-    p = pathlib.Path(path).resolve()
-    home = pathlib.Path.home().resolve()
-    tmp = pathlib.Path("/tmp").resolve()
-    if not (str(p).startswith(str(home)) or str(p).startswith(str(tmp))):
-        raise ValueError(f"Writing allowed only under home dir or /tmp, got: '{path}'")
-    return p
+def _safe_path(path: str) -> str:
+    resolved = os.path.realpath(path)
+    home = os.path.realpath(os.path.expanduser("~"))
+    tmp_dirs = {os.path.realpath(tempfile.gettempdir())}
+    if os.path.isdir("/tmp"):
+        tmp_dirs.add(os.path.realpath("/tmp"))
+    is_under_home = resolved.startswith(home + os.sep)
+    is_under_tmp = any(resolved.startswith(d + os.sep) for d in tmp_dirs)
+    if not (is_under_home or is_under_tmp):
+        raise ValueError(f"Output path must be under home or temp directory: {path}")
+    if is_under_home and os.sep + "." in resolved[len(home):]:
+        raise ValueError(f"Writing to hidden files/directories is not allowed: {path}")
+    return resolved
 
 # Неправильно
 with open(path, "wb") as f:  # путь не проверен

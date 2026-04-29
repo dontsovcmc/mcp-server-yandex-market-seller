@@ -3,8 +3,8 @@
 import json
 import logging
 import os
-import pathlib
 import sys
+import tempfile
 
 from mcp.server.fastmcp import FastMCP
 
@@ -61,23 +61,32 @@ def _parse_json(s: str, label: str = "input"):
         raise ValueError(f"Invalid JSON in {label}: {e}") from e
 
 
-def _safe_path(path: str) -> pathlib.Path:
-    """Проверить путь: запрет traversal, разрешена запись только в ~/... или /tmp/..."""
-    if ".." in pathlib.Path(path).parts:
-        raise ValueError(f"Path traversal not allowed: '{path}'")
-    p = pathlib.Path(path).resolve()
-    home = pathlib.Path.home().resolve()
-    tmp = pathlib.Path("/tmp").resolve()  # macOS: /tmp → /private/tmp
-    if not (str(p).startswith(str(home)) or str(p).startswith(str(tmp))):
-        raise ValueError(f"Writing allowed only under home dir or /tmp, got: '{path}'")
-    return p
+def _safe_path(path: str) -> str:
+    """Resolve and validate output path — only home or system temp allowed."""
+    resolved = os.path.realpath(path)
+    home = os.path.realpath(os.path.expanduser("~"))
+
+    tmp_dirs = {os.path.realpath(tempfile.gettempdir())}
+    if os.path.isdir("/tmp"):
+        tmp_dirs.add(os.path.realpath("/tmp"))
+
+    is_under_home = resolved.startswith(home + os.sep)
+    is_under_tmp = any(resolved.startswith(d + os.sep) for d in tmp_dirs)
+
+    if not (is_under_home or is_under_tmp):
+        raise ValueError(f"Output path must be under home or temp directory: {path}")
+
+    if is_under_home and os.sep + "." in resolved[len(home):]:
+        raise ValueError(f"Writing to hidden files/directories is not allowed: {path}")
+
+    return resolved
 
 
 def _save_bytes(data: bytes, path: str) -> str:
-    p = _safe_path(path)
-    with open(p, "wb") as f:
+    safe = _safe_path(path)
+    with open(safe, "wb") as f:
         f.write(data)
-    return _to_json({"path": str(p.resolve()), "size": len(data)})
+    return _to_json({"path": safe, "size": len(data)})
 
 
 # ── Campaigns & Settings ────────────────────────────────────────────
@@ -893,8 +902,8 @@ def ym_chat_new(payload_json: str, business_id: int = 0) -> str:
 @mcp.tool()
 def ym_chat_file_send(chat_id: int, file_path: str, business_id: int = 0) -> str:
     """Send file in chat."""
-    _safe_path(file_path)
-    return _to_json(_get_api().send_chat_file(business_id or _get_business_id(), chat_id, file_path))
+    safe = _safe_path(file_path)
+    return _to_json(_get_api().send_chat_file(business_id or _get_business_id(), chat_id, safe))
 
 
 # ── Reports ─────────────────────────────────────────────────────────
