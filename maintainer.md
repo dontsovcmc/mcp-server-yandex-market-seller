@@ -18,6 +18,19 @@ pip install mcp-server-yandex-market-seller==X.Y.Z
 
 ## MCP-реестр
 
+### CRITICAL: mcp-name в README
+
+**Обязательно** в `README.md` должна быть строка:
+
+```
+mcp-name: io.github.dontsovcmc/yandex-market-seller
+```
+
+Значение должно совпадать с полем `name` в `server.json`. Без этой строки `mcp-publisher publish` вернёт ошибку:
+`PyPI package ownership validation failed. The server name must appear as 'mcp-name: ...' in the package README`.
+
+Строка нужна для подтверждения владения PyPI-пакетом — реестр проверяет README на PyPI.
+
 ### Публикация
 
 ```bash

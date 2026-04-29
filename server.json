@@ -6,12 +6,12 @@
     "url": "https://github.com/dontsovcmc/mcp-server-yandex-market-seller",
     "source": "github"
   },
-  "version": "0.3.0",
+  "version": "0.4.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "mcp-server-yandex-market-seller",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       },
@@ -24,11 +24,11 @@
         },
         {
           "name": "YM_CAMPAIGN_ID",
-          "isRequired": true
+          "isRequired": false
         },
         {
           "name": "YM_BUSINESS_ID",
-          "isRequired": true
+          "isRequired": false
         },
         {
           "name": "YM_AUTH_TYPE",

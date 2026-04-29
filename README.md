@@ -2,7 +2,7 @@
 
 # mcp-server-yandex-market-seller
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](https://github.com/dontsovcmc/mcp-server-yandex-market-seller)
+[![Version](https://img.shields.io/badge/version-0.4.0-blue)](https://github.com/dontsovcmc/mcp-server-yandex-market-seller)
 
 MCP-сервер для работы с [Yandex Market Partner API](https://yandex.ru/dev/market/partner-api/doc/) через Claude Code, Claude Desktop и другие MCP-совместимые клиенты.
 
@@ -421,10 +421,6 @@ mcp-server-yandex-market-seller category-params 12345
 mcp-server-yandex-market-seller supply-requests
 mcp-server-yandex-market-seller operations
 ```
-
-## API спецификация
-
-Клиент написан по [OpenAPI спецификации Yandex Market Partner API](https://github.com/yandex-market/yandex-market-partner-api/blob/master/openapi/openapi.yaml).
 
 ## Лицензия
 

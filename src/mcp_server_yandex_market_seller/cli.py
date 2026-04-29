@@ -5,7 +5,6 @@ Without arguments starts MCP server (stdio transport).
 """
 
 import argparse
-import json
 import sys
 
 from . import __version__

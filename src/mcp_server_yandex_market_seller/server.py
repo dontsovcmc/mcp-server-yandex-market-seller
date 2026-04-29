@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import pathlib
 import sys
 
 from mcp.server.fastmcp import FastMCP
@@ -15,12 +16,18 @@ log = logging.getLogger(__name__)
 mcp = FastMCP("yandex-market-seller")
 
 
+_api_instance: YandexMarketAPI | None = None
+
+
 def _get_api() -> YandexMarketAPI:
-    token = os.getenv("YM_TOKEN")
-    if not token:
-        raise RuntimeError("YM_TOKEN environment variable is required")
-    auth_type = os.getenv("YM_AUTH_TYPE", "api-key")
-    return YandexMarketAPI(token, auth_type)
+    global _api_instance
+    if _api_instance is None:
+        token = os.getenv("YM_TOKEN")
+        if not token:
+            raise RuntimeError("YM_TOKEN environment variable is required")
+        auth_type = os.getenv("YM_AUTH_TYPE", "api-key")
+        _api_instance = YandexMarketAPI(token, auth_type)
+    return _api_instance
 
 
 def _get_campaign_id() -> int:
@@ -28,6 +35,11 @@ def _get_campaign_id() -> int:
     if not val:
         raise RuntimeError("YM_CAMPAIGN_ID environment variable is required")
     return int(val)
+
+
+def _get_optional_campaign_id() -> int | None:
+    val = os.getenv("YM_CAMPAIGN_ID", "")
+    return int(val) if val else None
 
 
 def _get_business_id() -> int:
@@ -41,10 +53,27 @@ def _j(data) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _parse_json(s: str):
+    """Парсить JSON-строку с понятным сообщением об ошибке."""
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON input: {e}") from e
+
+
+def _safe_path(path: str) -> pathlib.Path:
+    """Проверить путь на path traversal атаку."""
+    p = pathlib.Path(path)
+    if ".." in p.parts:
+        raise ValueError(f"Path traversal not allowed: '{path}'")
+    return p
+
+
 def _save_bytes(data: bytes, path: str) -> str:
-    with open(path, "wb") as f:
+    p = _safe_path(path)
+    with open(p, "wb") as f:
         f.write(data)
-    return _j({"path": os.path.abspath(path), "size": len(data)})
+    return _j({"path": str(p.resolve()), "size": len(data)})
 
 
 # ── Campaigns & Settings ────────────────────────────────────────────
@@ -72,7 +101,7 @@ def ym_campaign_settings(campaign_id: int = 0) -> str:
 def ym_campaign_settings_update(settings_json: str, campaign_id: int = 0) -> str:
     """Update campaign settings. Args: settings_json — JSON object."""
     return _j(_get_api().update_campaign_settings(
-        campaign_id or _get_campaign_id(), json.loads(settings_json)))
+        campaign_id or _get_campaign_id(), _parse_json(settings_json)))
 
 
 @mcp.tool()
@@ -85,7 +114,7 @@ def ym_business_settings(business_id: int = 0) -> str:
 def ym_business_settings_update(settings_json: str, business_id: int = 0) -> str:
     """Update business settings. Args: settings_json — JSON object."""
     return _j(_get_api().update_business_settings(
-        business_id or _get_business_id(), json.loads(settings_json)))
+        business_id or _get_business_id(), _parse_json(settings_json)))
 
 
 # ── Orders v2 ───────────────────────────────────────────────────────
@@ -112,7 +141,7 @@ def ym_order_status(order_id: int, status: str, substatus: str = "", campaign_id
 @mcp.tool()
 def ym_order_status_batch(updates_json: str, campaign_id: int = 0) -> str:
     """Batch update order statuses. Args: updates_json — JSON array of {orderId, status, substatus}."""
-    return _j(_get_api().batch_update_order_statuses(campaign_id or _get_campaign_id(), json.loads(updates_json)))
+    return _j(_get_api().batch_update_order_statuses(campaign_id or _get_campaign_id(), _parse_json(updates_json)))
 
 
 @mcp.tool()
@@ -142,7 +171,7 @@ def ym_order_items(order_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_order_items_update(order_id: int, items_json: str, campaign_id: int = 0) -> str:
     """Update order items. Args: items_json — JSON array."""
-    return _j(_get_api().update_order_items(campaign_id or _get_campaign_id(), order_id, json.loads(items_json)))
+    return _j(_get_api().update_order_items(campaign_id or _get_campaign_id(), order_id, _parse_json(items_json)))
 
 
 @mcp.tool()
@@ -154,13 +183,13 @@ def ym_order_boxes(order_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_order_boxes_update(order_id: int, boxes_json: str, campaign_id: int = 0) -> str:
     """Update order boxes. Args: boxes_json — JSON array."""
-    return _j(_get_api().update_order_boxes(campaign_id or _get_campaign_id(), order_id, json.loads(boxes_json)))
+    return _j(_get_api().update_order_boxes(campaign_id or _get_campaign_id(), order_id, _parse_json(boxes_json)))
 
 
 @mcp.tool()
 def ym_order_shipment_boxes(order_id: int, shipment_id: int, boxes_json: str, campaign_id: int = 0) -> str:
     """Set shipment boxes. Args: boxes_json — JSON array."""
-    return _j(_get_api().set_shipment_boxes(campaign_id or _get_campaign_id(), order_id, shipment_id, json.loads(boxes_json)))
+    return _j(_get_api().set_shipment_boxes(campaign_id or _get_campaign_id(), order_id, shipment_id, _parse_json(boxes_json)))
 
 
 @mcp.tool()
@@ -172,7 +201,7 @@ def ym_order_cancel_accept(order_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_order_delivery_date(order_id: int, dates_json: str, campaign_id: int = 0) -> str:
     """Set delivery date. Args: dates_json — {fromDate, toDate}."""
-    return _j(_get_api().set_order_delivery_date(campaign_id or _get_campaign_id(), order_id, json.loads(dates_json)))
+    return _j(_get_api().set_order_delivery_date(campaign_id or _get_campaign_id(), order_id, _parse_json(dates_json)))
 
 
 @mcp.tool()
@@ -184,7 +213,7 @@ def ym_order_tracking(order_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_order_tracking_update(order_id: int, tracks_json: str, campaign_id: int = 0) -> str:
     """Set tracking numbers. Args: tracks_json — JSON array of {trackCode, deliveryServiceId}."""
-    return _j(_get_api().set_order_tracking(campaign_id or _get_campaign_id(), order_id, json.loads(tracks_json)))
+    return _j(_get_api().set_order_tracking(campaign_id or _get_campaign_id(), order_id, _parse_json(tracks_json)))
 
 
 @mcp.tool()
@@ -220,7 +249,7 @@ def ym_order_storage_limit_update(order_id: int, date: str, campaign_id: int = 0
 @mcp.tool()
 def ym_order_deliver_digital(order_id: int, items_json: str, campaign_id: int = 0) -> str:
     """Deliver digital goods. Args: items_json — JSON array."""
-    return _j(_get_api().deliver_digital_goods(campaign_id or _get_campaign_id(), order_id, json.loads(items_json)))
+    return _j(_get_api().deliver_digital_goods(campaign_id or _get_campaign_id(), order_id, _parse_json(items_json)))
 
 
 @mcp.tool()
@@ -232,7 +261,7 @@ def ym_order_documents(order_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_order_document_create(order_id: int, document_json: str, campaign_id: int = 0) -> str:
     """Create order document."""
-    return _j(_get_api().create_order_document(campaign_id or _get_campaign_id(), order_id, json.loads(document_json)))
+    return _j(_get_api().create_order_document(campaign_id or _get_campaign_id(), order_id, _parse_json(document_json)))
 
 
 # ── Orders v1 ───────────────────────────────────────────────────────
@@ -241,25 +270,25 @@ def ym_order_document_create(order_id: int, document_json: str, campaign_id: int
 @mcp.tool()
 def ym_business_orders(payload_json: str, business_id: int = 0) -> str:
     """Get business-level orders (v1). Args: payload_json — filter criteria."""
-    return _j(_get_api().get_business_orders(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_business_orders(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_order_create(order_json: str, campaign_id: int = 0) -> str:
     """Create order (v1)."""
-    return _j(_get_api().create_order_v1(campaign_id or _get_campaign_id(), json.loads(order_json)))
+    return _j(_get_api().create_order_v1(campaign_id or _get_campaign_id(), _parse_json(order_json)))
 
 
 @mcp.tool()
 def ym_order_update_v1(order_json: str, campaign_id: int = 0) -> str:
     """Update order (v1)."""
-    return _j(_get_api().update_order_v1(campaign_id or _get_campaign_id(), json.loads(order_json)))
+    return _j(_get_api().update_order_v1(campaign_id or _get_campaign_id(), _parse_json(order_json)))
 
 
 @mcp.tool()
 def ym_order_update_options(options_json: str, campaign_id: int = 0) -> str:
     """Update order options (v1)."""
-    return _j(_get_api().update_order_options(campaign_id or _get_campaign_id(), json.loads(options_json)))
+    return _j(_get_api().update_order_options(campaign_id or _get_campaign_id(), _parse_json(options_json)))
 
 
 # ── Returns ─────────────────────────────────────────────────────────
@@ -286,7 +315,7 @@ def ym_return_decision(order_id: int, return_id: int, campaign_id: int = 0) -> s
 @mcp.tool()
 def ym_return_decision_set(order_id: int, return_id: int, decision_json: str, campaign_id: int = 0) -> str:
     """Set return decision."""
-    return _j(_get_api().set_return_decision(campaign_id or _get_campaign_id(), order_id, return_id, json.loads(decision_json)))
+    return _j(_get_api().set_return_decision(campaign_id or _get_campaign_id(), order_id, return_id, _parse_json(decision_json)))
 
 
 @mcp.tool()
@@ -304,19 +333,19 @@ def ym_return_application(order_id: int, return_id: int, output_path: str, campa
 @mcp.tool()
 def ym_business_return_decisions(payload_json: str, business_id: int = 0) -> str:
     """Get business return decisions (v1)."""
-    return _j(_get_api().get_business_return_decisions(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_business_return_decisions(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_return_create(return_json: str, campaign_id: int = 0) -> str:
     """Create return (v1)."""
-    return _j(_get_api().create_return_v1(campaign_id or _get_campaign_id(), json.loads(return_json)))
+    return _j(_get_api().create_return_v1(campaign_id or _get_campaign_id(), _parse_json(return_json)))
 
 
 @mcp.tool()
 def ym_return_cancel(return_json: str, campaign_id: int = 0) -> str:
     """Cancel return (v1)."""
-    return _j(_get_api().cancel_return_v1(campaign_id or _get_campaign_id(), json.loads(return_json)))
+    return _j(_get_api().cancel_return_v1(campaign_id or _get_campaign_id(), _parse_json(return_json)))
 
 
 # ── First-Mile Shipments ────────────────────────────────────────────
@@ -331,7 +360,7 @@ def ym_shipments(campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_shipments_search(payload_json: str, campaign_id: int = 0) -> str:
     """Search shipments. Args: payload_json — filter criteria."""
-    return _j(_get_api().search_shipments(campaign_id or _get_campaign_id(), json.loads(payload_json)))
+    return _j(_get_api().search_shipments(campaign_id or _get_campaign_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
@@ -343,7 +372,7 @@ def ym_shipment(shipment_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_shipment_update(shipment_id: int, payload_json: str, campaign_id: int = 0) -> str:
     """Update shipment."""
-    return _j(_get_api().update_shipment(campaign_id or _get_campaign_id(), shipment_id, json.loads(payload_json)))
+    return _j(_get_api().update_shipment(campaign_id or _get_campaign_id(), shipment_id, _parse_json(payload_json)))
 
 
 @mcp.tool()
@@ -361,7 +390,7 @@ def ym_shipment_orders(shipment_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_shipment_transfer(shipment_id: int, payload_json: str, campaign_id: int = 0) -> str:
     """Transfer orders to shipment."""
-    return _j(_get_api().transfer_shipment_orders(campaign_id or _get_campaign_id(), shipment_id, json.loads(payload_json)))
+    return _j(_get_api().transfer_shipment_orders(campaign_id or _get_campaign_id(), shipment_id, _parse_json(payload_json)))
 
 
 @mcp.tool()
@@ -397,7 +426,7 @@ def ym_shipment_pallets(shipment_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_shipment_pallets_update(shipment_id: int, pallets_json: str, campaign_id: int = 0) -> str:
     """Set shipment pallets."""
-    return _j(_get_api().set_shipment_pallets(campaign_id or _get_campaign_id(), shipment_id, json.loads(pallets_json)))
+    return _j(_get_api().set_shipment_pallets(campaign_id or _get_campaign_id(), shipment_id, _parse_json(pallets_json)))
 
 
 @mcp.tool()
@@ -446,7 +475,7 @@ def ym_offers(offer_ids: str = "", page_token: str = "", limit: int = 200, busin
 @mcp.tool()
 def ym_offers_update(offers_json: str, business_id: int = 0) -> str:
     """Update product descriptions."""
-    return _j(_get_api().update_offer_mappings(business_id or _get_business_id(), json.loads(offers_json)))
+    return _j(_get_api().update_offer_mappings(business_id or _get_business_id(), _parse_json(offers_json)))
 
 
 @mcp.tool()
@@ -484,13 +513,13 @@ def ym_prices(offer_ids: str = "", page_token: str = "", limit: int = 200, busin
 @mcp.tool()
 def ym_prices_update(prices_json: str, business_id: int = 0) -> str:
     """Update product prices."""
-    return _j(_get_api().update_business_offer_prices(business_id or _get_business_id(), json.loads(prices_json)))
+    return _j(_get_api().update_business_offer_prices(business_id or _get_business_id(), _parse_json(prices_json)))
 
 
 @mcp.tool()
 def ym_price_quarantine(payload_json: str = "{}", business_id: int = 0) -> str:
     """Get offers in price quarantine."""
-    return _j(_get_api().get_price_quarantine(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_price_quarantine(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
@@ -502,7 +531,7 @@ def ym_price_quarantine_confirm(offer_ids: str, business_id: int = 0) -> str:
 @mcp.tool()
 def ym_campaign_price_quarantine(payload_json: str = "{}", campaign_id: int = 0) -> str:
     """Get campaign price quarantine."""
-    return _j(_get_api().get_campaign_price_quarantine(campaign_id or _get_campaign_id(), json.loads(payload_json)))
+    return _j(_get_api().get_campaign_price_quarantine(campaign_id or _get_campaign_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
@@ -523,7 +552,7 @@ def ym_stocks(page_token: str = "", limit: int = 200, campaign_id: int = 0) -> s
 @mcp.tool()
 def ym_stocks_update(stocks_json: str, campaign_id: int = 0) -> str:
     """Update product stocks."""
-    return _j(_get_api().update_stocks(campaign_id or _get_campaign_id(), json.loads(stocks_json)))
+    return _j(_get_api().update_stocks(campaign_id or _get_campaign_id(), _parse_json(stocks_json)))
 
 
 # ── Campaign Offers ─────────────────────────────────────────────────
@@ -560,13 +589,13 @@ def ym_offer_cards(offer_ids: str = "", page_token: str = "", limit: int = 200, 
 @mcp.tool()
 def ym_offer_cards_update(cards_json: str, business_id: int = 0) -> str:
     """Update offer cards."""
-    return _j(_get_api().update_offer_cards(business_id or _get_business_id(), json.loads(cards_json)))
+    return _j(_get_api().update_offer_cards(business_id or _get_business_id(), _parse_json(cards_json)))
 
 
 @mcp.tool()
 def ym_offer_recommendations(payload_json: str = "{}", business_id: int = 0) -> str:
     """Get offer recommendations."""
-    return _j(_get_api().get_offer_recommendations(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_offer_recommendations(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 # ── Delivery ────────────────────────────────────────────────────────
@@ -581,13 +610,13 @@ def ym_delivery_services() -> str:
 @mcp.tool()
 def ym_delivery_options(payload_json: str, campaign_id: int = 0) -> str:
     """Get delivery options."""
-    return _j(_get_api().get_delivery_options(campaign_id or _get_campaign_id(), json.loads(payload_json)))
+    return _j(_get_api().get_delivery_options(campaign_id or _get_campaign_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_return_delivery_options(payload_json: str, campaign_id: int = 0) -> str:
     """Get return delivery options."""
-    return _j(_get_api().get_return_delivery_options(campaign_id or _get_campaign_id(), json.loads(payload_json)))
+    return _j(_get_api().get_return_delivery_options(campaign_id or _get_campaign_id(), _parse_json(payload_json)))
 
 
 # ── Logistics Points ───────────────────────────────────────────────
@@ -596,7 +625,7 @@ def ym_return_delivery_options(payload_json: str, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_logistics_points(payload_json: str = "{}", business_id: int = 0) -> str:
     """Get logistics/drop-off points. Args: payload_json — optional filter {warehouseIds: [...]}."""
-    return _j(_get_api().get_logistics_points(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_logistics_points(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 # ── Feedbacks ───────────────────────────────────────────────────────
@@ -611,7 +640,7 @@ def ym_feedbacks(page_token: str = "", limit: int = 200, business_id: int = 0) -
 @mcp.tool()
 def ym_feedback_skip(feedback_ids_json: str, business_id: int = 0) -> str:
     """Skip feedback reaction. Args: feedback_ids_json — JSON array of IDs."""
-    return _j(_get_api().skip_feedback_reaction(business_id or _get_business_id(), json.loads(feedback_ids_json)))
+    return _j(_get_api().skip_feedback_reaction(business_id or _get_business_id(), _parse_json(feedback_ids_json)))
 
 
 @mcp.tool()
@@ -623,7 +652,7 @@ def ym_feedback_comments(feedback_id: int, business_id: int = 0) -> str:
 @mcp.tool()
 def ym_feedback_comment_update(comment_json: str, business_id: int = 0) -> str:
     """Update feedback comment."""
-    return _j(_get_api().update_feedback_comment(business_id or _get_business_id(), json.loads(comment_json)))
+    return _j(_get_api().update_feedback_comment(business_id or _get_business_id(), _parse_json(comment_json)))
 
 
 @mcp.tool()
@@ -638,19 +667,19 @@ def ym_feedback_comment_delete(comment_id: int, business_id: int = 0) -> str:
 @mcp.tool()
 def ym_questions(payload_json: str = "{}", business_id: int = 0) -> str:
     """Get product questions."""
-    return _j(_get_api().get_questions(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_questions(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_question_answer(answer_json: str, business_id: int = 0) -> str:
     """Answer a question."""
-    return _j(_get_api().answer_question(business_id or _get_business_id(), json.loads(answer_json)))
+    return _j(_get_api().answer_question(business_id or _get_business_id(), _parse_json(answer_json)))
 
 
 @mcp.tool()
 def ym_question_update(update_json: str, business_id: int = 0) -> str:
     """Update an answer."""
-    return _j(_get_api().update_question_answer(business_id or _get_business_id(), json.loads(update_json)))
+    return _j(_get_api().update_question_answer(business_id or _get_business_id(), _parse_json(update_json)))
 
 
 # ── Quality Rating ──────────────────────────────────────────────────
@@ -660,7 +689,7 @@ def ym_question_update(update_json: str, business_id: int = 0) -> str:
 def ym_quality_rating(business_id: int = 0, campaign_id: int = 0) -> str:
     """Get quality rating."""
     bid = business_id or _get_business_id()
-    cid = campaign_id or int(os.getenv("YM_CAMPAIGN_ID", "0"))
+    cid = campaign_id or _get_optional_campaign_id()
     campaign_ids = [cid] if cid else None
     return _j(_get_api().get_quality_ratings(bid, campaign_ids=campaign_ids))
 
@@ -683,19 +712,19 @@ def ym_promos(business_id: int = 0) -> str:
 @mcp.tool()
 def ym_promo_offers(promo_id: str, payload_json: str = "{}", business_id: int = 0) -> str:
     """Get offers in a promotion."""
-    return _j(_get_api().get_promo_offers(business_id or _get_business_id(), promo_id, json.loads(payload_json)))
+    return _j(_get_api().get_promo_offers(business_id or _get_business_id(), promo_id, _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_promo_offers_update(payload_json: str, business_id: int = 0) -> str:
     """Update promo offers."""
-    return _j(_get_api().update_promo_offers(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().update_promo_offers(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_promo_offers_delete(payload_json: str, business_id: int = 0) -> str:
     """Delete promo offers."""
-    return _j(_get_api().delete_promo_offers(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().delete_promo_offers(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 # ── Bids ────────────────────────────────────────────────────────────
@@ -711,7 +740,7 @@ def ym_bids(offer_ids: str = "", page_token: str = "", limit: int = 200, busines
 @mcp.tool()
 def ym_bids_update(bids_json: str, business_id: int = 0) -> str:
     """Update bids (business)."""
-    return _j(_get_api().update_bids(business_id or _get_business_id(), json.loads(bids_json)))
+    return _j(_get_api().update_bids(business_id or _get_business_id(), _parse_json(bids_json)))
 
 
 @mcp.tool()
@@ -724,13 +753,13 @@ def ym_campaign_bids(offer_ids: str = "", page_token: str = "", limit: int = 200
 @mcp.tool()
 def ym_campaign_bids_update(bids_json: str, campaign_id: int = 0) -> str:
     """Update bids (campaign)."""
-    return _j(_get_api().update_campaign_bids(campaign_id or _get_campaign_id(), json.loads(bids_json)))
+    return _j(_get_api().update_campaign_bids(campaign_id or _get_campaign_id(), _parse_json(bids_json)))
 
 
 @mcp.tool()
 def ym_bid_recommendations(payload_json: str = "{}", business_id: int = 0) -> str:
     """Get bid recommendations."""
-    return _j(_get_api().get_bid_recommendations(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().get_bid_recommendations(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 # ── Outlets ─────────────────────────────────────────────────────────
@@ -751,13 +780,13 @@ def ym_outlet(outlet_id: int, campaign_id: int = 0) -> str:
 @mcp.tool()
 def ym_outlet_create(outlet_json: str, campaign_id: int = 0) -> str:
     """Create outlet."""
-    return _j(_get_api().create_outlet(campaign_id or _get_campaign_id(), json.loads(outlet_json)))
+    return _j(_get_api().create_outlet(campaign_id or _get_campaign_id(), _parse_json(outlet_json)))
 
 
 @mcp.tool()
 def ym_outlet_update(outlet_id: int, outlet_json: str, campaign_id: int = 0) -> str:
     """Update outlet."""
-    return _j(_get_api().update_outlet(campaign_id or _get_campaign_id(), outlet_id, json.loads(outlet_json)))
+    return _j(_get_api().update_outlet(campaign_id or _get_campaign_id(), outlet_id, _parse_json(outlet_json)))
 
 
 @mcp.tool()
@@ -817,7 +846,7 @@ def ym_category_params(category_id: int) -> str:
 @mcp.tool()
 def ym_max_sale_quantum(payload_json: str) -> str:
     """Get max sale quantum for categories."""
-    return _j(_get_api().get_max_sale_quantum(json.loads(payload_json)))
+    return _j(_get_api().get_max_sale_quantum(_parse_json(payload_json)))
 
 
 # ── Tariffs ─────────────────────────────────────────────────────────
@@ -826,8 +855,8 @@ def ym_max_sale_quantum(payload_json: str) -> str:
 @mcp.tool()
 def ym_tariffs(offers_json: str, campaign_id: int = 0) -> str:
     """Calculate marketplace tariffs."""
-    cid = campaign_id or int(os.getenv("YM_CAMPAIGN_ID", "0")) or None
-    return _j(_get_api().calculate_tariffs(json.loads(offers_json), campaign_id=cid))
+    cid = campaign_id or _get_optional_campaign_id()
+    return _j(_get_api().calculate_tariffs(_parse_json(offers_json), campaign_id=cid))
 
 
 # ── Chats ───────────────────────────────────────────────────────────
@@ -854,12 +883,13 @@ def ym_chat_send(chat_id: int, message: str, business_id: int = 0) -> str:
 @mcp.tool()
 def ym_chat_new(payload_json: str, business_id: int = 0) -> str:
     """Create new chat."""
-    return _j(_get_api().create_chat(business_id or _get_business_id(), json.loads(payload_json)))
+    return _j(_get_api().create_chat(business_id or _get_business_id(), _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_chat_file_send(chat_id: int, file_path: str, business_id: int = 0) -> str:
     """Send file in chat."""
+    _safe_path(file_path)
     return _j(_get_api().send_chat_file(business_id or _get_business_id(), chat_id, file_path))
 
 
@@ -875,13 +905,13 @@ def ym_report_status(report_id: str) -> str:
 @mcp.tool()
 def ym_report_generate(report_type: str, payload_json: str = "{}") -> str:
     """Generate a report. report_type: united-netting, united-marketplace-services, united-orders, united-returns, goods-realization, stocks-on-warehouses, goods-movement, shows-sales, competitors-position, goods-prices, goods-turnover, boost-consolidated, documents/shipment-list, shelf-statistics, documents/labels, goods-feedback, shows-boost, banners-statistics, closure-documents, jewelry-fiscal, sales-geography, key-indicators, closure-documents/detalization."""
-    return _j(_get_api().generate_report(report_type, json.loads(payload_json)))
+    return _j(_get_api().generate_report(report_type, _parse_json(payload_json)))
 
 
 @mcp.tool()
 def ym_report_barcodes(payload_json: str) -> str:
     """Generate barcodes report (v1)."""
-    return _j(_get_api().generate_barcodes_report(json.loads(payload_json)))
+    return _j(_get_api().generate_barcodes_report(_parse_json(payload_json)))
 
 
 # ── Stats ───────────────────────────────────────────────────────────

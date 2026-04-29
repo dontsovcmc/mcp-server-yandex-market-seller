@@ -7,11 +7,10 @@ Auth: Api-Key header or OAuth 2.0 Bearer token
 """
 
 import logging
-import sys
+import pathlib
 
 import requests
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", stream=sys.stderr)
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.partner.market.yandex.ru"
@@ -34,31 +33,36 @@ class YandexMarketAPI:
     def _get(self, path: str, **kwargs) -> dict:
         resp = self.session.get(f"{BASE_URL}{path}", timeout=30, **kwargs)
         if not resp.ok:
-            raise RuntimeError(f"GET {path} -> {resp.status_code}: {resp.text}")
+            log.debug("GET %s error body: %s", path, resp.text)
+            raise RuntimeError(f"GET {path} -> {resp.status_code}")
         return resp.json()
 
     def _get_bytes(self, path: str, **kwargs) -> bytes:
         resp = self.session.get(f"{BASE_URL}{path}", timeout=30, **kwargs)
         if not resp.ok:
-            raise RuntimeError(f"GET {path} -> {resp.status_code}: {resp.text}")
+            log.debug("GET %s error body: %s", path, resp.text)
+            raise RuntimeError(f"GET {path} -> {resp.status_code}")
         return resp.content
 
     def _post(self, path: str, payload: dict | None = None, **kwargs) -> dict:
         resp = self.session.post(f"{BASE_URL}{path}", json=payload, timeout=30, **kwargs)
         if not resp.ok:
-            raise RuntimeError(f"POST {path} -> {resp.status_code}: {resp.text}")
+            log.debug("POST %s error body: %s", path, resp.text)
+            raise RuntimeError(f"POST {path} -> {resp.status_code}")
         return resp.json()
 
     def _put(self, path: str, payload: dict, **kwargs) -> dict:
         resp = self.session.put(f"{BASE_URL}{path}", json=payload, timeout=30, **kwargs)
         if not resp.ok:
-            raise RuntimeError(f"PUT {path} -> {resp.status_code}: {resp.text}")
+            log.debug("PUT %s error body: %s", path, resp.text)
+            raise RuntimeError(f"PUT {path} -> {resp.status_code}")
         return resp.json()
 
     def _delete(self, path: str, payload: dict | None = None, **kwargs) -> dict:
         resp = self.session.request("DELETE", f"{BASE_URL}{path}", json=payload, timeout=30, **kwargs)
         if not resp.ok:
-            raise RuntimeError(f"DELETE {path} -> {resp.status_code}: {resp.text}")
+            log.debug("DELETE %s error body: %s", path, resp.text)
+            raise RuntimeError(f"DELETE {path} -> {resp.status_code}")
         return resp.json()
 
     # --- Кампании и настройки ---
@@ -791,7 +795,10 @@ class YandexMarketAPI:
 
     def send_chat_file(self, business_id: int, chat_id: int, file_path: str) -> dict:
         """Отправить файл в чат."""
-        with open(file_path, "rb") as f:
+        p = pathlib.Path(file_path)
+        if ".." in p.parts:
+            raise ValueError(f"Path traversal not allowed: '{file_path}'")
+        with open(p, "rb") as f:
             resp = self.session.post(
                 f"{BASE_URL}/v2/businesses/{business_id}/chats/file/send",
                 params={"chatId": chat_id},
@@ -800,7 +807,8 @@ class YandexMarketAPI:
                 timeout=60,
             )
         if not resp.ok:
-            raise RuntimeError(f"Send file -> {resp.status_code}: {resp.text}")
+            log.debug("POST .../chats/file/send error body: %s", resp.text)
+            raise RuntimeError(f"POST /v2/businesses/{business_id}/chats/file/send -> {resp.status_code}")
         return resp.json()
 
     # --- Отчёты ---

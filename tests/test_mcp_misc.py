@@ -412,3 +412,98 @@ async def test_ym_supply_request_documents():
             async with create_connected_server_and_client_session(mcp._mcp_server) as s:
                 r = await s.call_tool("ym_supply_request_documents", {"output_path": "/tmp/out.pdf"})
                 assert not r.isError
+
+
+# ── Security: path traversal ───────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_order_labels_path_traversal():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
+        M.return_value.get_order_labels.return_value = b"PDF"
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_order_labels", {"order_id": 1, "output_path": "../evil.pdf"})
+            assert r.isError
+            assert "Path traversal" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_reception_transfer_act_path_traversal():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
+        M.return_value.get_reception_transfer_act.return_value = b"PDF"
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_reception_transfer_act", {"output_path": "../../etc/passwd"})
+            assert r.isError
+            assert "Path traversal" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_chat_file_send_path_traversal():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI"):
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_chat_file_send", {"chat_id": 1, "file_path": "../../../etc/passwd"})
+            assert r.isError
+            assert "Path traversal" in r.content[0].text
+
+
+# ── Security: invalid JSON ─────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_offers_update_invalid_json():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI"):
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_offers_update", {"offers_json": "not-json"})
+            assert r.isError
+            assert "Invalid JSON" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_stocks_update_invalid_json():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI"):
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_stocks_update", {"stocks_json": "{{bad"})
+            assert r.isError
+            assert "Invalid JSON" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_delivery_options_invalid_json():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI"):
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_delivery_options", {"payload_json": "[invalid"})
+            assert r.isError
+            assert "Invalid JSON" in r.content[0].text
+
+
+# ── API errors ──────────────────────────────────────────────────────
+
+
+@pytest.mark.anyio
+async def test_orders_api_error():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
+        M.return_value.get_orders.side_effect = RuntimeError("GET /orders -> 500")
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_orders", {})
+            assert r.isError
+            assert "500" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_feedbacks_api_error():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
+        M.return_value.get_feedbacks.side_effect = RuntimeError("GET /feedbacks -> 403")
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_feedbacks", {})
+            assert r.isError
+            assert "403" in r.content[0].text
+
+
+@pytest.mark.anyio
+async def test_warehouses_api_error():
+    with patch("mcp_server_yandex_market_seller.server.YandexMarketAPI") as M:
+        M.return_value.get_warehouses.side_effect = RuntimeError("GET /warehouses -> 401")
+        async with create_connected_server_and_client_session(mcp._mcp_server) as s:
+            r = await s.call_tool("ym_warehouses", {})
+            assert r.isError
+            assert "401" in r.content[0].text
