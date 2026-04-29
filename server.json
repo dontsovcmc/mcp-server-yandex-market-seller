@@ -6,12 +6,12 @@
     "url": "https://github.com/dontsovcmc/mcp-server-yandex-market-seller",
     "source": "github"
   },
-  "version": "0.4.2",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "mcp-server-yandex-market-seller",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "transport": {
         "type": "stdio"
       },
