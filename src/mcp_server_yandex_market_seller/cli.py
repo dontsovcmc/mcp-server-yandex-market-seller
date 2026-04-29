@@ -5,10 +5,20 @@ Without arguments starts MCP server (stdio transport).
 """
 
 import argparse
+import json
 import sys
 
 from . import __version__
 from . import server
+
+
+def _j(s: str) -> dict | list:
+    """Parse JSON string for CLI args."""
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError as e:
+        print(f"Invalid JSON: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main(argv: list[str] | None = None):
@@ -686,138 +696,189 @@ def main(argv: list[str] | None = None):
         parser.print_help()
         sys.exit(1)
 
+    # fmt: off
     handlers = {
-        "campaigns": lambda: server.ym_campaigns(),
-        "campaign": lambda: server.ym_campaign(campaign_id=args.campaign_id),
-        "campaign-settings": lambda: server.ym_campaign_settings(campaign_id=args.campaign_id),
-        "campaign-settings-update": lambda: server.ym_campaign_settings_update(args.settings_json, campaign_id=args.campaign_id),
-        "business-settings": lambda: server.ym_business_settings(business_id=args.business_id),
-        "business-settings-update": lambda: server.ym_business_settings_update(args.settings_json, business_id=args.business_id),
+        # ── Campaigns ──────────────────────────────────────────────
+        "campaigns": lambda: server.execute_action("campaigns", {}),
+        "campaign": lambda: server.execute_action("campaign", {"campaign_id": args.campaign_id}),
+        "campaign-settings": lambda: server.execute_action("campaign_settings", {"campaign_id": args.campaign_id}),
+        "campaign-settings-update": lambda: server.execute_action("campaign_settings_update", {**_j(args.settings_json), "campaign_id": args.campaign_id}),
+        "business-settings": lambda: server.execute_action("business_settings", {"business_id": args.business_id}),
+        "business-settings-update": lambda: server.execute_action("business_settings_update", {**_j(args.settings_json), "business_id": args.business_id}),
+
+        # ── Orders v2 ─────────────────────────────────────────────
         "orders": lambda: server.ym_orders(status=args.status, page=args.page, page_size=args.page_size, campaign_id=args.campaign_id),
         "order": lambda: server.ym_order(args.order_id, campaign_id=args.campaign_id),
-        "order-items": lambda: server.ym_order_items(args.order_id, campaign_id=args.campaign_id),
-        "order-buyer": lambda: server.ym_order_buyer(args.order_id, campaign_id=args.campaign_id),
-        "order-tracking": lambda: server.ym_order_tracking(args.order_id, campaign_id=args.campaign_id),
+        "order-items": lambda: server.execute_action("order_items", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-buyer": lambda: server.execute_action("order_buyer", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-tracking": lambda: server.execute_action("order_tracking", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
         "order-status": lambda: server.ym_order_status(args.order_id, args.status, substatus=args.substatus, campaign_id=args.campaign_id),
-        "order-status-batch": lambda: server.ym_order_status_batch(args.updates_json, campaign_id=args.campaign_id),
-        "order-labels": lambda: server.ym_order_labels(args.order_id, args.output_path, campaign_id=args.campaign_id),
-        "order-labels-data": lambda: server.ym_order_labels_data(args.order_id, campaign_id=args.campaign_id),
-        "order-box-label": lambda: server.ym_order_box_label(args.order_id, args.shipment_id, args.box_id, args.output_path, campaign_id=args.campaign_id),
-        "order-items-update": lambda: server.ym_order_items_update(args.order_id, args.items_json, campaign_id=args.campaign_id),
-        "order-boxes": lambda: server.ym_order_boxes(args.order_id, campaign_id=args.campaign_id),
-        "order-boxes-update": lambda: server.ym_order_boxes_update(args.order_id, args.boxes_json, campaign_id=args.campaign_id),
-        "order-shipment-boxes": lambda: server.ym_order_shipment_boxes(args.order_id, args.shipment_id, args.boxes_json, campaign_id=args.campaign_id),
-        "order-cancel-accept": lambda: server.ym_order_cancel_accept(args.order_id, campaign_id=args.campaign_id),
-        "order-delivery-date": lambda: server.ym_order_delivery_date(args.order_id, args.dates_json, campaign_id=args.campaign_id),
-        "order-tracking-update": lambda: server.ym_order_tracking_update(args.order_id, args.tracks_json, campaign_id=args.campaign_id),
-        "order-business-buyer": lambda: server.ym_order_business_buyer(args.order_id, campaign_id=args.campaign_id),
-        "order-verify-eac": lambda: server.ym_order_verify_eac(args.order_id, args.code, campaign_id=args.campaign_id),
-        "order-storage-limit": lambda: server.ym_order_storage_limit(args.order_id, campaign_id=args.campaign_id),
-        "order-storage-limit-update": lambda: server.ym_order_storage_limit_update(args.order_id, args.date, campaign_id=args.campaign_id),
-        "order-deliver-digital": lambda: server.ym_order_deliver_digital(args.order_id, args.items_json, campaign_id=args.campaign_id),
-        "order-documents": lambda: server.ym_order_documents(args.order_id, campaign_id=args.campaign_id),
-        "order-document-create": lambda: server.ym_order_document_create(args.order_id, args.document_json, campaign_id=args.campaign_id),
-        "business-orders": lambda: server.ym_business_orders(args.payload_json, business_id=args.business_id),
-        "order-create": lambda: server.ym_order_create(args.order_json, campaign_id=args.campaign_id),
-        "order-update-v1": lambda: server.ym_order_update_v1(args.order_json, campaign_id=args.campaign_id),
-        "order-update-options": lambda: server.ym_order_update_options(args.options_json, campaign_id=args.campaign_id),
+        "order-status-batch": lambda: server.execute_action("order_status_batch", {"orders": _j(args.updates_json), "campaign_id": args.campaign_id}),
+        "order-labels": lambda: server.execute_file_action("order_labels", {"order_id": args.order_id, "campaign_id": args.campaign_id}, args.output_path),
+        "order-labels-data": lambda: server.execute_action("order_labels_data", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-box-label": lambda: server.execute_file_action("order_box_label", {"order_id": args.order_id, "shipment_id": args.shipment_id, "box_id": args.box_id, "campaign_id": args.campaign_id}, args.output_path),
+        "order-items-update": lambda: server.execute_action("order_items_update", {"order_id": args.order_id, "items": _j(args.items_json), "campaign_id": args.campaign_id}),
+        "order-boxes": lambda: server.execute_action("order_boxes", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-boxes-update": lambda: server.execute_action("order_boxes_update", {"order_id": args.order_id, "boxes": _j(args.boxes_json), "campaign_id": args.campaign_id}),
+        "order-shipment-boxes": lambda: server.execute_action("order_shipment_boxes", {"order_id": args.order_id, "shipment_id": args.shipment_id, "boxes": _j(args.boxes_json), "campaign_id": args.campaign_id}),
+        "order-cancel-accept": lambda: server.execute_action("order_cancel_accept", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-delivery-date": lambda: server.execute_action("order_delivery_date", {"order_id": args.order_id, "dates": _j(args.dates_json), "campaign_id": args.campaign_id}),
+        "order-tracking-update": lambda: server.execute_action("order_tracking_update", {"order_id": args.order_id, "tracks": _j(args.tracks_json), "campaign_id": args.campaign_id}),
+        "order-business-buyer": lambda: server.execute_action("order_business_buyer", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-verify-eac": lambda: server.execute_action("order_verify_eac", {"order_id": args.order_id, "code": args.code, "campaign_id": args.campaign_id}),
+        "order-storage-limit": lambda: server.execute_action("order_storage_limit", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-storage-limit-update": lambda: server.execute_action("order_storage_limit_update", {"order_id": args.order_id, "date": args.date, "campaign_id": args.campaign_id}),
+        "order-deliver-digital": lambda: server.execute_action("order_deliver_digital", {"order_id": args.order_id, "items": _j(args.items_json), "campaign_id": args.campaign_id}),
+        "order-documents": lambda: server.execute_action("order_documents", {"order_id": args.order_id, "campaign_id": args.campaign_id}),
+        "order-document-create": lambda: server.execute_action("order_document_create", {"order_id": args.order_id, "document": _j(args.document_json), "campaign_id": args.campaign_id}),
+        "business-orders": lambda: server.execute_action("business_orders", {**_j(args.payload_json), "business_id": args.business_id}),
+        "order-create": lambda: server.execute_action("order_create", {**_j(args.order_json), "campaign_id": args.campaign_id}),
+        "order-update-v1": lambda: server.execute_action("order_update_v1", {**_j(args.order_json), "campaign_id": args.campaign_id}),
+        "order-update-options": lambda: server.execute_action("order_update_options", {**_j(args.options_json), "campaign_id": args.campaign_id}),
+
+        # ── Offers ─────────────────────────────────────────────────
         "offers": lambda: server.ym_offers(offer_ids=args.offer_ids, limit=args.limit, business_id=args.business_id),
-        "offer-cards": lambda: server.ym_offer_cards(offer_ids=args.offer_ids, business_id=args.business_id),
-        "offers-update": lambda: server.ym_offers_update(args.offers_json, business_id=args.business_id),
-        "offers-delete": lambda: server.ym_offers_delete(args.offer_ids, business_id=args.business_id),
-        "offers-archive": lambda: server.ym_offers_archive(args.offer_ids, archive=not args.unarchive, business_id=args.business_id),
-        "generate-barcodes": lambda: server.ym_generate_barcodes(args.offer_ids, business_id=args.business_id),
+        "offer-cards": lambda: server.execute_action("offer_cards", {"offer_ids": [s.strip() for s in args.offer_ids.split(",") if s.strip()] if args.offer_ids else None, "business_id": args.business_id}),
+        "offers-update": lambda: server.execute_action("offers_update", {"offerMappings": _j(args.offers_json), "business_id": args.business_id}),
+        "offers-delete": lambda: server.execute_action("offers_delete", {"offer_ids": [s.strip() for s in args.offer_ids.split(",")], "business_id": args.business_id}),
+        "offers-archive": lambda: server.execute_action("offers_archive", {"offer_ids": [s.strip() for s in args.offer_ids.split(",")], "archive": not args.unarchive, "business_id": args.business_id}),
+        "generate-barcodes": lambda: server.execute_action("generate_barcodes", {"offer_ids": [s.strip() for s in args.offer_ids.split(",")], "business_id": args.business_id}),
+
+        # ── Prices ─────────────────────────────────────────────────
         "prices": lambda: server.ym_prices(offer_ids=args.offer_ids, limit=args.limit, business_id=args.business_id),
         "prices-update": lambda: server.ym_prices_update(args.prices_json, business_id=args.business_id),
-        "price-quarantine": lambda: server.ym_price_quarantine(business_id=args.business_id),
-        "price-quarantine-confirm": lambda: server.ym_price_quarantine_confirm(args.offer_ids, business_id=args.business_id),
-        "campaign-price-quarantine": lambda: server.ym_campaign_price_quarantine(args.payload_json, campaign_id=args.campaign_id),
-        "campaign-price-quarantine-confirm": lambda: server.ym_campaign_price_quarantine_confirm(args.offer_ids, campaign_id=args.campaign_id),
+        "price-quarantine": lambda: server.execute_action("price_quarantine", {"business_id": args.business_id}),
+        "price-quarantine-confirm": lambda: server.execute_action("price_quarantine_confirm", {"offer_ids": [s.strip() for s in args.offer_ids.split(",")], "business_id": args.business_id}),
+        "campaign-price-quarantine": lambda: server.execute_action("campaign_price_quarantine", {**_j(args.payload_json), "campaign_id": args.campaign_id}),
+        "campaign-price-quarantine-confirm": lambda: server.execute_action("campaign_price_quarantine_confirm", {"offer_ids": [s.strip() for s in args.offer_ids.split(",")], "campaign_id": args.campaign_id}),
+
+        # ── Stocks ─────────────────────────────────────────────────
         "stocks": lambda: server.ym_stocks(limit=args.limit, campaign_id=args.campaign_id),
         "stocks-update": lambda: server.ym_stocks_update(args.stocks_json, campaign_id=args.campaign_id),
-        "hidden-offers": lambda: server.ym_hidden_offers(campaign_id=args.campaign_id),
-        "campaign-offers": lambda: server.ym_campaign_offers(limit=args.limit, campaign_id=args.campaign_id),
-        "unhide-offers": lambda: server.ym_unhide_offers(args.offer_ids, campaign_id=args.campaign_id),
-        "offer-cards-update": lambda: server.ym_offer_cards_update(args.cards_json, business_id=args.business_id),
-        "offer-recommendations": lambda: server.ym_offer_recommendations(args.payload_json, business_id=args.business_id),
+
+        # ── Campaign Offers / Hidden ───────────────────────────────
+        "hidden-offers": lambda: server.execute_action("hidden_offers", {"campaign_id": args.campaign_id}),
+        "campaign-offers": lambda: server.execute_action("campaign_offers", {"limit": args.limit, "campaign_id": args.campaign_id}),
+        "unhide-offers": lambda: server.execute_action("unhide_offers", {"offer_ids": [s.strip() for s in args.offer_ids.split(",")], "campaign_id": args.campaign_id}),
+
+        # ── Offer Cards ────────────────────────────────────────────
+        "offer-cards-update": lambda: server.execute_action("offer_cards_update", {"offerCards": _j(args.cards_json), "business_id": args.business_id}),
+        "offer-recommendations": lambda: server.execute_action("offer_recommendations", {**_j(args.payload_json), "business_id": args.business_id}),
+
+        # ── Returns ────────────────────────────────────────────────
         "returns": lambda: server.ym_returns(page=args.page, campaign_id=args.campaign_id),
-        "return": lambda: server.ym_return(args.order_id, args.return_id, campaign_id=args.campaign_id),
-        "return-decision": lambda: server.ym_return_decision(args.order_id, args.return_id, campaign_id=args.campaign_id),
-        "return-decision-set": lambda: server.ym_return_decision_set(args.order_id, args.return_id, args.decision_json, campaign_id=args.campaign_id),
-        "return-decision-submit": lambda: server.ym_return_decision_submit(args.order_id, args.return_id, campaign_id=args.campaign_id),
-        "return-application": lambda: server.ym_return_application(args.order_id, args.return_id, args.output_path, campaign_id=args.campaign_id),
-        "business-return-decisions": lambda: server.ym_business_return_decisions(args.payload_json, business_id=args.business_id),
-        "return-create": lambda: server.ym_return_create(args.return_json, campaign_id=args.campaign_id),
-        "return-cancel": lambda: server.ym_return_cancel(args.return_json, campaign_id=args.campaign_id),
+        "return": lambda: server.execute_action("return", {"order_id": args.order_id, "return_id": args.return_id, "campaign_id": args.campaign_id}),
+        "return-decision": lambda: server.execute_action("return_decision", {"order_id": args.order_id, "return_id": args.return_id, "campaign_id": args.campaign_id}),
+        "return-decision-set": lambda: server.execute_action("return_decision_set", {"order_id": args.order_id, "return_id": args.return_id, "decision": _j(args.decision_json), "campaign_id": args.campaign_id}),
+        "return-decision-submit": lambda: server.execute_action("return_decision_submit", {"order_id": args.order_id, "return_id": args.return_id, "campaign_id": args.campaign_id}),
+        "return-application": lambda: server.execute_file_action("return_application", {"order_id": args.order_id, "return_id": args.return_id, "campaign_id": args.campaign_id}, args.output_path),
+        "business-return-decisions": lambda: server.execute_action("business_return_decisions", {**_j(args.payload_json), "business_id": args.business_id}),
+        "return-create": lambda: server.execute_action("return_create", {**_j(args.return_json), "campaign_id": args.campaign_id}),
+        "return-cancel": lambda: server.execute_action("return_cancel", {**_j(args.return_json), "campaign_id": args.campaign_id}),
+
+        # ── Shipments ──────────────────────────────────────────────
         "shipments": lambda: server.ym_shipments(campaign_id=args.campaign_id),
-        "shipment": lambda: server.ym_shipment(args.shipment_id, campaign_id=args.campaign_id),
-        "shipments-search": lambda: server.ym_shipments_search(args.payload_json, campaign_id=args.campaign_id),
-        "shipment-update": lambda: server.ym_shipment_update(args.shipment_id, args.payload_json, campaign_id=args.campaign_id),
-        "shipment-confirm": lambda: server.ym_shipment_confirm(args.shipment_id, campaign_id=args.campaign_id),
-        "shipment-orders": lambda: server.ym_shipment_orders(args.shipment_id, campaign_id=args.campaign_id),
-        "shipment-transfer": lambda: server.ym_shipment_transfer(args.shipment_id, args.payload_json, campaign_id=args.campaign_id),
-        "shipment-act": lambda: server.ym_shipment_act(args.shipment_id, args.output_path, campaign_id=args.campaign_id),
-        "shipment-inbound-act": lambda: server.ym_shipment_inbound_act(args.shipment_id, args.output_path, campaign_id=args.campaign_id),
-        "shipment-waybill": lambda: server.ym_shipment_waybill(args.shipment_id, args.output_path, campaign_id=args.campaign_id),
-        "shipment-discrepancy-act": lambda: server.ym_shipment_discrepancy_act(args.shipment_id, args.output_path, campaign_id=args.campaign_id),
-        "shipment-pallets": lambda: server.ym_shipment_pallets(args.shipment_id, campaign_id=args.campaign_id),
-        "shipment-pallets-update": lambda: server.ym_shipment_pallets_update(args.shipment_id, args.pallets_json, campaign_id=args.campaign_id),
-        "shipment-pallet-labels": lambda: server.ym_shipment_pallet_labels(args.shipment_id, args.output_path, campaign_id=args.campaign_id),
+        "shipment": lambda: server.execute_action("shipment", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}),
+        "shipments-search": lambda: server.execute_action("shipments_search", {**_j(args.payload_json), "campaign_id": args.campaign_id}),
+        "shipment-update": lambda: server.execute_action("shipment_update", {"shipment_id": args.shipment_id, "payload": _j(args.payload_json), "campaign_id": args.campaign_id}),
+        "shipment-confirm": lambda: server.execute_action("shipment_confirm", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}),
+        "shipment-orders": lambda: server.execute_action("shipment_orders", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}),
+        "shipment-transfer": lambda: server.execute_action("shipment_transfer", {"shipment_id": args.shipment_id, "payload": _j(args.payload_json), "campaign_id": args.campaign_id}),
+        "shipment-act": lambda: server.execute_file_action("shipment_act", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}, args.output_path),
+        "shipment-inbound-act": lambda: server.execute_file_action("shipment_inbound_act", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}, args.output_path),
+        "shipment-waybill": lambda: server.execute_file_action("shipment_waybill", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}, args.output_path),
+        "shipment-discrepancy-act": lambda: server.execute_file_action("shipment_discrepancy_act", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}, args.output_path),
+        "shipment-pallets": lambda: server.execute_action("shipment_pallets", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}),
+        "shipment-pallets-update": lambda: server.execute_action("shipment_pallets_update", {"shipment_id": args.shipment_id, "pallets": _j(args.pallets_json), "campaign_id": args.campaign_id}),
+        "shipment-pallet-labels": lambda: server.execute_file_action("shipment_pallet_labels", {"shipment_id": args.shipment_id, "campaign_id": args.campaign_id}, args.output_path),
+
+        # ── Feedbacks ──────────────────────────────────────────────
         "feedbacks": lambda: server.ym_feedbacks(limit=args.limit, business_id=args.business_id),
-        "feedback-skip": lambda: server.ym_feedback_skip(args.feedback_ids_json, business_id=args.business_id),
-        "feedback-comments": lambda: server.ym_feedback_comments(args.feedback_id, business_id=args.business_id),
-        "feedback-comment-update": lambda: server.ym_feedback_comment_update(args.comment_json, business_id=args.business_id),
-        "feedback-comment-delete": lambda: server.ym_feedback_comment_delete(args.comment_id, business_id=args.business_id),
-        "questions": lambda: server.ym_questions(business_id=args.business_id),
-        "question-answer": lambda: server.ym_question_answer(args.answer_json, business_id=args.business_id),
-        "question-update": lambda: server.ym_question_update(args.update_json, business_id=args.business_id),
-        "quality": lambda: server.ym_quality_rating(business_id=args.business_id),
-        "quality-details": lambda: server.ym_quality_details(campaign_id=args.campaign_id),
-        "warehouses": lambda: server.ym_warehouses(business_id=args.business_id),
-        "warehouse-status": lambda: server.ym_warehouse_status(args.enabled, campaign_id=args.campaign_id),
-        "all-warehouses": lambda: server.ym_all_warehouses(),
-        "logistics-points": lambda: server.ym_logistics_points(business_id=args.business_id),
-        "reception-transfer-act": lambda: server.ym_reception_transfer_act(args.output_path, campaign_id=args.campaign_id),
-        "outlets": lambda: server.ym_outlets(campaign_id=args.campaign_id),
-        "outlet": lambda: server.ym_outlet(args.outlet_id, campaign_id=args.campaign_id),
-        "outlet-create": lambda: server.ym_outlet_create(args.outlet_json, campaign_id=args.campaign_id),
-        "outlet-update": lambda: server.ym_outlet_update(args.outlet_id, args.outlet_json, campaign_id=args.campaign_id),
-        "outlet-delete": lambda: server.ym_outlet_delete(args.outlet_id, campaign_id=args.campaign_id),
-        "outlet-licenses": lambda: server.ym_outlet_licenses(campaign_id=args.campaign_id),
-        "delivery-services": lambda: server.ym_delivery_services(),
-        "delivery-options": lambda: server.ym_delivery_options(args.payload_json, campaign_id=args.campaign_id),
-        "return-delivery-options": lambda: server.ym_return_delivery_options(args.payload_json, campaign_id=args.campaign_id),
-        "regions": lambda: server.ym_regions(name=args.name),
-        "region": lambda: server.ym_region(args.region_id),
-        "region-children": lambda: server.ym_region_children(args.region_id, page=args.page),
-        "countries": lambda: server.ym_countries(),
-        "categories": lambda: server.ym_categories(),
-        "category-params": lambda: server.ym_category_params(args.category_id),
-        "max-sale-quantum": lambda: server.ym_max_sale_quantum(args.payload_json),
-        "tariffs": lambda: server.ym_tariffs(args.offers_json, campaign_id=args.campaign_id),
-        "promos": lambda: server.ym_promos(business_id=args.business_id),
-        "promo-offers": lambda: server.ym_promo_offers(args.promo_id, payload_json=args.payload_json, business_id=args.business_id),
-        "promo-offers-update": lambda: server.ym_promo_offers_update(args.payload_json, business_id=args.business_id),
-        "promo-offers-delete": lambda: server.ym_promo_offers_delete(args.payload_json, business_id=args.business_id),
+        "feedback-skip": lambda: server.execute_action("feedback_skip", {"feedbackIds": _j(args.feedback_ids_json), "business_id": args.business_id}),
+        "feedback-comments": lambda: server.execute_action("feedback_comments", {"feedback_id": args.feedback_id, "business_id": args.business_id}),
+        "feedback-comment-update": lambda: server.execute_action("feedback_comment_update", {**_j(args.comment_json), "business_id": args.business_id}),
+        "feedback-comment-delete": lambda: server.execute_action("feedback_comment_delete", {"comment_id": args.comment_id, "business_id": args.business_id}),
+
+        # ── Questions ──────────────────────────────────────────────
+        "questions": lambda: server.execute_action("questions", {"business_id": args.business_id}),
+        "question-answer": lambda: server.execute_action("question_answer", {**_j(args.answer_json), "business_id": args.business_id}),
+        "question-update": lambda: server.execute_action("question_update", {**_j(args.update_json), "business_id": args.business_id}),
+
+        # ── Quality ────────────────────────────────────────────────
+        "quality": lambda: server.execute_action("quality_rating", {"business_id": args.business_id}),
+        "quality-details": lambda: server.execute_action("quality_details", {"campaign_id": args.campaign_id}),
+
+        # ── Warehouses ─────────────────────────────────────────────
+        "warehouses": lambda: server.execute_action("warehouses", {"business_id": args.business_id}),
+        "warehouse-status": lambda: server.execute_action("warehouse_status", {"enabled": args.enabled, "campaign_id": args.campaign_id}),
+        "all-warehouses": lambda: server.execute_action("all_warehouses", {}),
+        "logistics-points": lambda: server.execute_action("logistics_points", {"business_id": args.business_id}),
+        "reception-transfer-act": lambda: server.execute_file_action("reception_transfer_act", {"campaign_id": args.campaign_id}, args.output_path),
+
+        # ── Outlets ────────────────────────────────────────────────
+        "outlets": lambda: server.execute_action("outlets", {"campaign_id": args.campaign_id}),
+        "outlet": lambda: server.execute_action("outlet", {"outlet_id": args.outlet_id, "campaign_id": args.campaign_id}),
+        "outlet-create": lambda: server.execute_action("outlet_create", {**_j(args.outlet_json), "campaign_id": args.campaign_id}),
+        "outlet-update": lambda: server.execute_action("outlet_update", {"outlet_id": args.outlet_id, "outlet": _j(args.outlet_json), "campaign_id": args.campaign_id}),
+        "outlet-delete": lambda: server.execute_action("outlet_delete", {"outlet_id": args.outlet_id, "campaign_id": args.campaign_id}),
+        "outlet-licenses": lambda: server.execute_action("outlet_licenses", {"campaign_id": args.campaign_id}),
+
+        # ── Delivery ───────────────────────────────────────────────
+        "delivery-services": lambda: server.execute_action("delivery_services", {}),
+        "delivery-options": lambda: server.execute_action("delivery_options", {**_j(args.payload_json), "campaign_id": args.campaign_id}),
+        "return-delivery-options": lambda: server.execute_action("return_delivery_options", {**_j(args.payload_json), "campaign_id": args.campaign_id}),
+
+        # ── Geo ────────────────────────────────────────────────────
+        "regions": lambda: server.execute_action("regions", {"name": args.name}),
+        "region": lambda: server.execute_action("region", {"region_id": args.region_id}),
+        "region-children": lambda: server.execute_action("region_children", {"region_id": args.region_id, "page": args.page}),
+        "countries": lambda: server.execute_action("countries", {}),
+
+        # ── Categories ─────────────────────────────────────────────
+        "categories": lambda: server.execute_action("categories", {}),
+        "category-params": lambda: server.execute_action("category_params", {"category_id": args.category_id}),
+        "max-sale-quantum": lambda: server.execute_action("max_sale_quantum", _j(args.payload_json)),
+
+        # ── Tariffs ────────────────────────────────────────────────
+        "tariffs": lambda: server.execute_action("tariffs", {"offers": _j(args.offers_json), "campaign_id": args.campaign_id}),
+
+        # ── Promos ─────────────────────────────────────────────────
+        "promos": lambda: server.execute_action("promos", {"business_id": args.business_id}),
+        "promo-offers": lambda: server.execute_action("promo_offers", {"promo_id": args.promo_id, "payload": _j(args.payload_json), "business_id": args.business_id}),
+        "promo-offers-update": lambda: server.execute_action("promo_offers_update", {**_j(args.payload_json), "business_id": args.business_id}),
+        "promo-offers-delete": lambda: server.execute_action("promo_offers_delete", {**_j(args.payload_json), "business_id": args.business_id}),
+
+        # ── Bids ───────────────────────────────────────────────────
         "bids": lambda: server.ym_bids(offer_ids=args.offer_ids, business_id=args.business_id),
-        "bids-update": lambda: server.ym_bids_update(args.bids_json, business_id=args.business_id),
-        "campaign-bids": lambda: server.ym_campaign_bids(offer_ids=args.offer_ids, limit=args.limit, campaign_id=args.campaign_id),
-        "campaign-bids-update": lambda: server.ym_campaign_bids_update(args.bids_json, campaign_id=args.campaign_id),
-        "bid-recommendations": lambda: server.ym_bid_recommendations(business_id=args.business_id),
+        "bids-update": lambda: server.execute_action("bids_update", {"bids": _j(args.bids_json), "business_id": args.business_id}),
+        "campaign-bids": lambda: server.execute_action("campaign_bids", {"offer_ids": [s.strip() for s in args.offer_ids.split(",") if s.strip()] if args.offer_ids else None, "limit": args.limit, "campaign_id": args.campaign_id}),
+        "campaign-bids-update": lambda: server.execute_action("campaign_bids_update", {"bids": _j(args.bids_json), "campaign_id": args.campaign_id}),
+        "bid-recommendations": lambda: server.execute_action("bid_recommendations", {"business_id": args.business_id}),
+
+        # ── Chats ──────────────────────────────────────────────────
         "chats": lambda: server.ym_chats(business_id=args.business_id),
-        "chat-history": lambda: server.ym_chat_history(args.chat_id, limit=args.limit, business_id=args.business_id),
-        "chat-send": lambda: server.ym_chat_send(args.chat_id, args.message, business_id=args.business_id),
-        "chat-new": lambda: server.ym_chat_new(args.payload_json, business_id=args.business_id),
-        "chat-file-send": lambda: server.ym_chat_file_send(args.chat_id, args.file_path, business_id=args.business_id),
-        "report-status": lambda: server.ym_report_status(args.report_id),
+        "chat-history": lambda: server.execute_action("chat_history", {"chat_id": args.chat_id, "limit": args.limit, "business_id": args.business_id}),
+        "chat-send": lambda: server.execute_action("chat_send", {"chat_id": args.chat_id, "message": args.message, "business_id": args.business_id}),
+        "chat-new": lambda: server.execute_action("chat_new", {**_j(args.payload_json), "business_id": args.business_id}),
+        "chat-file-send": lambda: server.execute_action("chat_file_send", {"chat_id": args.chat_id, "file_path": args.file_path, "business_id": args.business_id}),
+
+        # ── Reports ────────────────────────────────────────────────
+        "report-status": lambda: server.execute_action("report_status", {"report_id": args.report_id}),
         "report-generate": lambda: server.ym_report_generate(args.report_type, payload_json=args.payload_json),
-        "report-barcodes": lambda: server.ym_report_barcodes(args.payload_json),
-        "order-stats": lambda: server.ym_order_stats(date_from=args.date_from, date_to=args.date_to, campaign_id=args.campaign_id),
-        "supply-requests": lambda: server.ym_supply_requests(campaign_id=args.campaign_id),
-        "supply-request-items": lambda: server.ym_supply_request_items(campaign_id=args.campaign_id),
-        "supply-request-documents": lambda: server.ym_supply_request_documents(args.output_path, campaign_id=args.campaign_id),
-        "sku-stats": lambda: server.ym_sku_stats(campaign_id=args.campaign_id),
-        "operations": lambda: server.ym_operations(business_id=args.business_id),
+        "report-barcodes": lambda: server.execute_action("report_barcodes", _j(args.payload_json)),
+
+        # ── Stats ──────────────────────────────────────────────────
+        "order-stats": lambda: server.execute_action("order_stats", {"date_from": args.date_from, "date_to": args.date_to, "campaign_id": args.campaign_id}),
+        "sku-stats": lambda: server.execute_action("sku_stats", {"campaign_id": args.campaign_id}),
+
+        # ── Supply ─────────────────────────────────────────────────
+        "supply-requests": lambda: server.execute_action("supply_requests", {"campaign_id": args.campaign_id}),
+        "supply-request-items": lambda: server.execute_action("supply_request_items", {"campaign_id": args.campaign_id}),
+        "supply-request-documents": lambda: server.execute_file_action("supply_request_documents", {"campaign_id": args.campaign_id}, args.output_path),
+
+        # ── Operations ─────────────────────────────────────────────
+        "operations": lambda: server.execute_action("operations", {"business_id": args.business_id}),
     }
+    # fmt: on
 
     print(handlers[args.command]())

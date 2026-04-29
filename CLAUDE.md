@@ -28,7 +28,9 @@ GitHub Actions: `.github/workflows/test.yml`, `runs-on: self-hosted`. Токен
 src/mcp_server_yandex_market_seller/
 ├── __init__.py          # main(), версия
 ├── __main__.py          # python -m entry point
-├── server.py            # FastMCP, все tools
+├── server.py            # FastMCP, 18 tools (3 мета + 15 promoted)
+├── models.py            # Pydantic-модели для валидации параметров
+├── actions.py           # Каталог 131 действий (Action dataclass)
 ├── ym_api.py            # HTTP-клиент Yandex Market Partner API
 └── cli.py               # CLI-интерфейс
 ```
@@ -106,3 +108,7 @@ src/mcp_server_yandex_market_seller/
 - **ПЕРЕД КАЖДЫМ КОММИТОМ** проверять все файлы на наличие реальных персональных данных. Заменять на вымышленные.
 - **В КАЖДОМ PR** обновлять версию в `pyproject.toml`, `src/mcp_server_yandex_market_seller/__init__.py` и `server.json` (patch для фиксов, minor для новых фич).
 - **ПЕРЕД публикацией в MCP-реестр** обязательно запускать `mcp-publisher validate` — проверяет `server.json` на соответствие схеме реестра (лимиты длины полей и т.д.).
+- **Публикация** (PyPI + MCP-реестр одной командой):
+  ```bash
+  python3 -m build && twine upload dist/* && rm -rf ./dist && mcp-publisher login github && mcp-publisher publish
+  ```
