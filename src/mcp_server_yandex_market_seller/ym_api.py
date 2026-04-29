@@ -479,7 +479,7 @@ class YandexMarketAPI:
         params: dict = {"limit": limit}
         if page_token:
             params["page_token"] = page_token
-        return self._get(f"/v2/campaigns/{campaign_id}/offers/stocks", params=params)
+        return self._post(f"/v2/campaigns/{campaign_id}/offers/stocks", {}, params=params)
 
     def update_stocks(self, campaign_id: int, stocks: list[dict]) -> dict:
         """Обновить остатки товаров."""
@@ -615,16 +615,16 @@ class YandexMarketAPI:
     def get_order_stats(self, campaign_id: int, date_from: str = "",
                         date_to: str = "") -> dict:
         """Получить статистику заказов."""
-        params: dict = {}
+        payload: dict = {}
         if date_from:
-            params["dateFrom"] = date_from
+            payload["dateFrom"] = date_from
         if date_to:
-            params["dateTo"] = date_to
-        return self._get(f"/v2/campaigns/{campaign_id}/stats/orders", params=params)
+            payload["dateTo"] = date_to
+        return self._post(f"/v2/campaigns/{campaign_id}/stats/orders", payload)
 
-    def get_sku_stats(self, campaign_id: int, **params) -> dict:
+    def get_sku_stats(self, campaign_id: int, payload: dict | None = None) -> dict:
         """Получить статистику по SKU."""
-        return self._get(f"/v2/campaigns/{campaign_id}/stats/skus", params=params)
+        return self._post(f"/v2/campaigns/{campaign_id}/stats/skus", payload or {})
 
     # --- Рейтинг ---
 
@@ -637,7 +637,7 @@ class YandexMarketAPI:
 
     def get_quality_details(self, campaign_id: int) -> dict:
         """Получить детали рейтинга качества."""
-        return self._get(f"/v2/campaigns/{campaign_id}/ratings/quality/details")
+        return self._post(f"/v2/campaigns/{campaign_id}/ratings/quality/details", {})
 
     # --- Промоакции ---
 
