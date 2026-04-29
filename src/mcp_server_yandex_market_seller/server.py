@@ -103,13 +103,13 @@ def _save_bytes(data: bytes, path: str) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_campaigns() -> str:
-    """List all Yandex Market campaigns (shops)."""
+    """List all campaigns (shops) in the account. Returns array of {id, domain, placementType}. Use ym_campaign for details of a single campaign."""
     return _to_json(_get_api().get_campaigns())
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_campaign(campaign_id: int = 0) -> str:
-    """Get campaign info. Args: campaign_id (default env)."""
+    """Get single campaign details by ID. Returns domain, placement type, region. Use ym_campaigns to list all."""
     return _to_json(_get_api().get_campaign(campaign_id or _get_campaign_id()))
 
 
@@ -144,19 +144,19 @@ def ym_business_settings_update(settings_json: str, business_id: int = 0) -> str
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_orders(status: str = "", page: int = 1, page_size: int = 50, campaign_id: int = 0) -> str:
-    """List orders. Statuses: PROCESSING, DELIVERY, PICKUP, DELIVERED, CANCELLED, UNPAID."""
+    """List orders with optional status filter. Statuses: UNPAID, PROCESSING, DELIVERY, PICKUP, DELIVERED, CANCELLED. Returns paginated list. Use ym_order for single order details."""
     return _to_json(_get_api().get_orders(campaign_id or _get_campaign_id(), status=status, page=page, page_size=page_size))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_order(order_id: int, campaign_id: int = 0) -> str:
-    """Get order details."""
+    """Get full order details: items, delivery, buyer info, status history. Use ym_orders to search/filter multiple orders."""
     return _to_json(_get_api().get_order(campaign_id or _get_campaign_id(), order_id))
 
 
 @mcp.tool(annotations={"readOnlyHint": False})
 def ym_order_status(order_id: int, status: str, substatus: str = "", campaign_id: int = 0) -> str:
-    """Update order status (e.g. PROCESSING→DELIVERY)."""
+    """Update order status. Typical flow: PROCESSING → DELIVERY → DELIVERED. Args: status, substatus (optional). Use ym_order_status_batch for multiple orders."""
     return _to_json(_get_api().update_order_status(campaign_id or _get_campaign_id(), order_id, status, substatus))
 
 
@@ -168,13 +168,13 @@ def ym_order_status_batch(updates_json: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_order_labels(order_id: int, output_path: str, campaign_id: int = 0) -> str:
-    """Download order shipping labels (PDF)."""
+    """Download shipping labels as PDF file. Saves to output_path (must be under ~/... or /tmp/...). Use ym_order_labels_data for JSON label data without PDF."""
     return _save_bytes(_get_api().get_order_labels(campaign_id or _get_campaign_id(), order_id), output_path)
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_order_labels_data(order_id: int, campaign_id: int = 0) -> str:
-    """Get order label data (JSON, not PDF)."""
+    """Get label data as JSON (parcel dimensions, tracking). Does NOT download PDF — use ym_order_labels for PDF file."""
     return _to_json(_get_api().get_order_labels_data(campaign_id or _get_campaign_id(), order_id))
 
 
@@ -318,13 +318,13 @@ def ym_order_update_options(options_json: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_returns(page: int = 1, page_size: int = 50, campaign_id: int = 0) -> str:
-    """List returns."""
+    """List returns for a campaign. Paginated. Use ym_return for single return details."""
     return _to_json(_get_api().get_returns(campaign_id or _get_campaign_id(), page=page, page_size=page_size))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_return(order_id: int, return_id: int, campaign_id: int = 0) -> str:
-    """Get return details."""
+    """Get return details: items, reason, status, decision. Use ym_return_decision_set to set decision (REFUND/REPAIR/etc)."""
     return _to_json(_get_api().get_return(campaign_id or _get_campaign_id(), order_id, return_id))
 
 
@@ -375,7 +375,7 @@ def ym_return_cancel(return_json: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_shipments(campaign_id: int = 0) -> str:
-    """List first-mile shipments."""
+    """List first-mile shipments. Use ym_shipments_search for advanced filtering, ym_shipment for single shipment details."""
     return _to_json(_get_api().get_shipments(campaign_id or _get_campaign_id()))
 
 
@@ -387,7 +387,7 @@ def ym_shipments_search(payload_json: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_shipment(shipment_id: int, campaign_id: int = 0) -> str:
-    """Get shipment details."""
+    """Get shipment details: status, orders, pallets. Use ym_shipment_orders for order list in shipment."""
     return _to_json(_get_api().get_shipment(campaign_id or _get_campaign_id(), shipment_id))
 
 
@@ -489,26 +489,26 @@ def ym_reception_transfer_act(output_path: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_offers(offer_ids: str = "", page_token: str = "", limit: int = 200, business_id: int = 0) -> str:
-    """List products (offer mappings)."""
+    """List products (offer mappings) at business level. Returns SKU, name, category, mapping status. Paginated. Use ym_campaign_offers for campaign-level offers with prices/stocks."""
     ids = [s.strip() for s in offer_ids.split(",") if s.strip()] if offer_ids else None
     return _to_json(_get_api().get_offer_mappings(business_id or _get_business_id(), offer_ids=ids, page_token=page_token, limit=limit))
 
 
 @mcp.tool(annotations={"readOnlyHint": False})
 def ym_offers_update(offers_json: str, business_id: int = 0) -> str:
-    """Update product descriptions."""
+    """Create or update product descriptions (offer mappings). Args: offers_json — JSON array of offer objects. Business-level operation."""
     return _to_json(_get_api().update_offer_mappings(business_id or _get_business_id(), _parse_json(offers_json, "offers_json")))
 
 
 @mcp.tool(annotations={"destructiveHint": True})
 def ym_offers_delete(offer_ids: str, business_id: int = 0) -> str:
-    """Delete products. Args: offer_ids — comma-separated."""
+    """Permanently delete products. Args: offer_ids — comma-separated offer IDs. IRREVERSIBLE. Use ym_offers_archive to hide without deleting."""
     return _to_json(_get_api().delete_offer_mappings(business_id or _get_business_id(), [s.strip() for s in offer_ids.split(",")]))
 
 
 @mcp.tool(annotations={"destructiveHint": True})
 def ym_offers_archive(offer_ids: str, archive: bool = True, business_id: int = 0) -> str:
-    """Archive or unarchive products."""
+    """Archive products (hide from sale, keep data). Args: offer_ids — comma-separated, unarchive — true to restore. Reversible alternative to ym_offers_delete."""
     ids = [s.strip() for s in offer_ids.split(",")]
     bid = business_id or _get_business_id()
     if archive:
@@ -527,14 +527,14 @@ def ym_generate_barcodes(offer_ids: str, business_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_prices(offer_ids: str = "", page_token: str = "", limit: int = 200, business_id: int = 0) -> str:
-    """Get product prices."""
+    """Get product prices at business level. Returns current prices, currency. Use ym_campaign_offers for campaign-level prices with stock info."""
     ids = [s.strip() for s in offer_ids.split(",") if s.strip()] if offer_ids else None
     return _to_json(_get_api().get_business_offer_prices(business_id or _get_business_id(), offer_ids=ids, page_token=page_token, limit=limit))
 
 
 @mcp.tool(annotations={"readOnlyHint": False})
 def ym_prices_update(prices_json: str, business_id: int = 0) -> str:
-    """Update product prices."""
+    """Update product prices. Args: prices_json — JSON array of {offerId, price {value, currencyId}}. Business-level operation."""
     return _to_json(_get_api().update_business_offer_prices(business_id or _get_business_id(), _parse_json(prices_json, "prices_json")))
 
 
@@ -567,13 +567,13 @@ def ym_campaign_price_quarantine_confirm(offer_ids: str, campaign_id: int = 0) -
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_stocks(page_token: str = "", limit: int = 200, campaign_id: int = 0) -> str:
-    """Get product stocks."""
+    """Get product stocks for a campaign. Returns warehouse stocks per SKU. Use ym_stocks_update to change stock quantities."""
     return _to_json(_get_api().get_stocks(campaign_id or _get_campaign_id(), page_token=page_token, limit=limit))
 
 
 @mcp.tool(annotations={"readOnlyHint": False})
 def ym_stocks_update(stocks_json: str, campaign_id: int = 0) -> str:
-    """Update product stocks."""
+    """Update product stocks. Args: stocks_json — JSON array of {sku, warehouseId, items: [{count, type, updatedAt}]}."""
     return _to_json(_get_api().update_stocks(campaign_id or _get_campaign_id(), _parse_json(stocks_json, "stocks_json")))
 
 
@@ -582,13 +582,13 @@ def ym_stocks_update(stocks_json: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_campaign_offers(page_token: str = "", limit: int = 200, campaign_id: int = 0) -> str:
-    """Get campaign offers with prices and stock."""
+    """Get campaign offers with prices, stocks, and status. Campaign-level view. Use ym_offers for business-level product catalog."""
     return _to_json(_get_api().get_campaign_offers(campaign_id or _get_campaign_id(), page_token=page_token, limit=limit))
 
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_hidden_offers(page_token: str = "", limit: int = 200, campaign_id: int = 0) -> str:
-    """Get hidden offers."""
+    """Get offers hidden from sale. Use ym_unhide_offers to restore visibility."""
     return _to_json(_get_api().get_hidden_offers(campaign_id or _get_campaign_id(), page_token=page_token, limit=limit))
 
 
@@ -655,7 +655,7 @@ def ym_logistics_points(payload_json: str = "{}", business_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_feedbacks(page_token: str = "", limit: int = 200, business_id: int = 0) -> str:
-    """Get product feedbacks."""
+    """Get product reviews/feedbacks. Paginated. Use ym_feedback_comments for comments on a review."""
     return _to_json(_get_api().get_feedbacks(business_id or _get_business_id(), page_token=page_token, limit=limit))
 
 
@@ -688,7 +688,7 @@ def ym_feedback_comment_delete(comment_id: int, business_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_questions(payload_json: str = "{}", business_id: int = 0) -> str:
-    """Get product questions."""
+    """Get product questions from buyers. Use ym_question_answer to reply, ym_question_update to edit reply."""
     return _to_json(_get_api().get_questions(business_id or _get_business_id(), _parse_json(payload_json, "payload_json")))
 
 
@@ -709,7 +709,7 @@ def ym_question_update(update_json: str, business_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_quality_rating(business_id: int = 0, campaign_id: int = 0) -> str:
-    """Get quality rating."""
+    """Get quality rating for campaigns. Shows overall score and component ratings."""
     bid = business_id or _get_business_id()
     cid = campaign_id or _get_optional_campaign_id()
     campaign_ids = [cid] if cid else None
@@ -754,7 +754,7 @@ def ym_promo_offers_delete(payload_json: str, business_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_bids(offer_ids: str = "", page_token: str = "", limit: int = 200, business_id: int = 0) -> str:
-    """Get bids (business)."""
+    """Get current bids at business level. Use ym_bid_recommendations for suggested bid values, ym_bids_update to change bids."""
     ids = [s.strip() for s in offer_ids.split(",") if s.strip()] if offer_ids else None
     return _to_json(_get_api().get_bids(business_id or _get_business_id(), offer_ids=ids, page_token=page_token, limit=limit))
 
@@ -876,7 +876,7 @@ def ym_max_sale_quantum(payload_json: str) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_tariffs(offers_json: str, campaign_id: int = 0) -> str:
-    """Calculate marketplace tariffs."""
+    """Calculate marketplace tariffs (commissions, delivery, storage). Args: offers_json — array of {offerId, categoryId, price, ...}."""
     cid = campaign_id or _get_optional_campaign_id()
     return _to_json(_get_api().calculate_tariffs(_parse_json(offers_json, "offers_json"), campaign_id=cid))
 
@@ -886,7 +886,7 @@ def ym_tariffs(offers_json: str, campaign_id: int = 0) -> str:
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_chats(page_token: str = "", limit: int = 50, business_id: int = 0) -> str:
-    """List chats."""
+    """List buyer chats. Use ym_chat_history for messages, ym_chat_send to reply."""
     return _to_json(_get_api().get_chats(business_id or _get_business_id(), page_token=page_token, limit=limit))
 
 
@@ -898,7 +898,7 @@ def ym_chat_history(chat_id: int, page_token: str = "", limit: int = 50, busines
 
 @mcp.tool(annotations={"readOnlyHint": False})
 def ym_chat_send(chat_id: int, message: str, business_id: int = 0) -> str:
-    """Send chat message."""
+    """Send text message in buyer chat. Use ym_chat_file_send to send a file."""
     return _to_json(_get_api().send_chat_message(business_id or _get_business_id(), chat_id, message))
 
 
@@ -920,13 +920,13 @@ def ym_chat_file_send(chat_id: int, file_path: str, business_id: int = 0) -> str
 
 @mcp.tool(annotations={"readOnlyHint": True})
 def ym_report_status(report_id: str) -> str:
-    """Check report generation status."""
+    """Check async report status. Returns PENDING/PROCESSING/DONE with download URL when ready. Use after ym_report_generate."""
     return _to_json(_get_api().get_report_status(report_id))
 
 
 @mcp.tool(annotations={"readOnlyHint": False})
 def ym_report_generate(report_type: str, payload_json: str = "{}") -> str:
-    """Generate a report. report_type: united-netting, united-marketplace-services, united-orders, united-returns, goods-realization, stocks-on-warehouses, goods-movement, shows-sales, competitors-position, goods-prices, goods-turnover, boost-consolidated, documents/shipment-list, shelf-statistics, documents/labels, goods-feedback, shows-boost, banners-statistics, closure-documents, jewelry-fiscal, sales-geography, key-indicators, closure-documents/detalization."""
+    """Start async report generation. Returns reportId for polling with ym_report_status. Types: united-netting, united-marketplace-services, united-orders, united-returns, goods-realization, stocks-on-warehouses, goods-movement, shows-sales."""
     return _to_json(_get_api().generate_report(report_type, _parse_json(payload_json, "payload_json")))
 
 
